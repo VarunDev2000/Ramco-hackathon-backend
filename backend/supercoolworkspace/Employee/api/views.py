@@ -11,6 +11,10 @@ from tensorflow.keras.preprocessing.image import ImageDataGenerator
 import os
 import time
 import datetime
+import pandas
+import sys
+import random
+
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 #----------------------------------------------------------------------------
 
@@ -36,7 +40,7 @@ class EmployeeViewSet(viewsets.ModelViewSet):
 class call_model(APIView):
 
     def get(self,request):
-        # Define data generators
+        
         train_dir = "ML/data/train"
         val_dir = "ML/data/test"
 
@@ -62,7 +66,7 @@ class call_model(APIView):
                 color_mode="grayscale",
                 class_mode='categorical')
 
-        # Create the model
+        
         model = Sequential()
 
         model.add(Conv2D(32, kernel_size=(3, 3), activation='relu', input_shape=(48,48,1)))
@@ -81,23 +85,17 @@ class call_model(APIView):
         model.add(Dropout(0.5))
         model.add(Dense(7, activation='softmax'))
 
-        # If you want to train the same model or try other models, go for this
 
-
-        # emotions will be displayed on your face from the webcam feed
         model.load_weights('ML/model.h5')
 
-        # prevents openCL usage and unnecessary logging messages
         cv2.ocl.setUseOpenCL(False)
 
-        # dictionary which assigns each label an emotion (alphabetical order)
         emotion_dict = {0: "Angry", 1: "Disgusted", 2: "Fearful", 3: "Happy", 4: "Neutral", 5: "Sad", 6: "Surprised"}
         emotion_percent = {"Angry":0,"Disgusted":0,"Fearful":0,"Happy":0,"Neutral":0,"Sad":0,"Surprised":0}
-        # start the webcam feed
+
         cap = cv2.VideoCapture(0)
         start = time.time()
         while True:
-            # Find haar cascade to draw bounding box around face
             ret, frame = cap.read()
             if not ret:
                 break
@@ -133,6 +131,54 @@ class call_model(APIView):
         Happy = emotion_percent['Happy'],Neutral = emotion_percent['Neutral'],Sad = emotion_percent['Sad'],Timestamp = datetime.date.today())
         obj_create.save()
 
+        return Response(emotion_percent, status=status.HTTP_200_OK)
+
+
+class open_music(APIView):
+
+    def get(self,request):
+        actions = {}
+        emotions = ["Angry", "Happy", "Sad", "Neutral"]
+        df = pandas.read_excel("EmotionLinks.xlsx") 
+        actions["Angry"] = [x for x in df.angry.dropna()] 
+        actions["Happy"] = [x for x in df.happy.dropna()]
+        actions["Sad"] = [x for x in df.sad.dropna()]
+        actions["Neutral"] = [x for x in df.neutral.dropna()]
+
+        def open_stuff(filename): 
+            if sys.platform == "win32":
+                os.startfile(filename)
+            else:
+                opener ="open" if sys.platform == "darwin" else "xdg-open"
+                subprocess.call([opener, filename])
+        
+        latest = Employee.objects.order_by('-id')[0]
+
+        maxi = 0
+        emotion = ""
+
+        e = {'Happy':latest.Happy,'Sad':latest.Sad,'Angry':latest.Angry,'Neutral':latest.Neutral}
+
+        for key,value in e.items():
+            if value>maxi:
+                maxi = value
+                emotion = key
+
+        count = 0
+
+        for key,value in e.items():
+            if value==maxi:
+                count = count + 1
+        
+        if(count>=2):
+            emotion = ""
+
+        if emotion != "":
+            actionlist = [x for x in actions[emotion]]
+            random.shuffle(actionlist)
+            open_stuff(actionlist[0])
+        
+        emotion_percent = {}
         return Response(emotion_percent, status=status.HTTP_200_OK)
 
 
